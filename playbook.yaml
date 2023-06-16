@@ -1,0 +1,40 @@
+---
+- name: Deploy Configuration Changes
+  hosts: ansible_servers  # Replace with the appropriate group of target hosts
+  become: true
+  
+  tasks:
+    - name: Clone or update the playbook repository
+      git:
+        repo: https://github.com/projects-11-playbooks.git
+        dest: /tmp/playbooks
+        version: master
+        force: yes
+  
+    - name: Check out the desired branch
+      git:
+        repo: /tmp/playbooks
+        dest: /etc/ansible/playbooks  # Path on the target hosts where playbooks will be stored
+        version: "{{ branch_name }}"
+        force: yes
+  
+    - name: Verify playbook syntax
+      command: ansible-playbook --syntax-check /etc/ansible/playbooks/playbook.yaml
+      register: syntax_check
+      changed_when: false
+      failed_when: syntax_check.rc != 0
+  
+    - name: Notify syntax errors via Slack
+      command: |
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"Error: Playbook syntax check failed!"}' https://slack-webhook-url
+      when: syntax_check.rc != 0
+  
+    - name: Run the playbook
+      command: ansible-playbook /etc/ansible/playbooks/main.yml
+      register: playbook_output
+      changed_when: false
+  
+    - name: Notify playbook execution status via Slack
+      command: |
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"Playbook execution completed successfully!"}' https://slack-webhook-url
+      when: playbook_output.rc == 0
